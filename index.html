@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Streamr M3tering Stream Viewer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+    body {
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        min-height: 100vh;
+        padding: 20px;
+    }
+
+    .container {
+        max-width: 1200px;
+        margin: 0 auto;
+        background: white;
+        border-radius: 12px;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        overflow: hidden;
+    }
+
+    .header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 30px;
+        text-align: center;
+    }
+
+    .header h1 {
+        font-size: 2em;
+        margin-bottom: 10px;
+    }
+
+    .header .stream-id {
+        font-size: 0.9em;
+        opacity: 0.9;
+        word-break: break-all;
+    }
+
+    .status-bar {
+        padding: 15px 30px;
+        background: #f8f9fa;
+        border-bottom: 1px solid #dee2e6;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 10px;
+    }
+
+    .status {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .status-indicator {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        background: #dc3545;
+        animation: pulse 2s infinite;
+    }
+
+    .status-indicator.connected {
+        background: #28a745;
+    }
+
+    @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.5; }
+    }
+
+    .stats {
+        display: flex;
+        gap: 20px;
+        font-size: 0.9em;
+        color: #6c757d;
+    }
+
+    .stats span {
+        font-weight: bold;
+        color: #495057;
+    }
+
+    .controls {
+        padding: 15px 30px;
+        background: #ffffff;
+        border-bottom: 1px solid #dee2e6;
+        display: flex;
+        gap: 10px;
+    }
+
+    .btn {
+        padding: 8px 16px;
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 0.9em;
+        transition: all 0.3s;
+    }
+
+    .btn-primary {
+        background: #667eea;
+        color: white;
+    }
+
+    .btn-primary:hover {
+        background: #5568d3;
+    }
+
+    .btn-secondary {
+        background: #6c757d;
+        color: white;
+    }
+
+    .btn-secondary:hover {
+        background: #5a6268;
+    }
+
+    .messages-container {
+        height: calc(100vh - 400px);
+        min-height: 400px;
+        overflow-y: auto;
+        padding: 20px 30px;
+    }
+
+    .message-card {
+        background: #f8f9fa;
+        border-left: 4px solid #667eea;
+        border-radius: 6px;
+        padding: 15px;
+        margin-bottom: 15px;
+        animation: slideIn 0.3s ease-out;
+    }
+
+    @keyframes slideIn {
+        from {
+            opacity: 0;
+            transform: translateY(-10px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    .message-header {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 10px;
+        font-size: 0.85em;
+        color: #6c757d;
+    }
+
+    .message-header .m3ter-id {
+        font-weight: bold;
+        color: #667eea;
+    }
+
+    .message-content {
+        font-family: 'Courier New', monospace;
+        font-size: 0.85em;
+        word-break: break-all;
+        background: white;
+        padding: 10px;
+        border-radius: 4px;
+        max-height: 200px;
+        overflow-y: auto;
+    }
+
+    .empty-state {
+        text-align: center;
+        padding: 60px 20px;
+        color: #6c757d;
+    }
+
+    .empty-state svg {
+        width: 80px;
+        height: 80px;
+        margin-bottom: 20px;
+        opacity: 0.5;
+    }
+
+    .footer {
+        padding: 15px 30px;
+        background: #f8f9fa;
+        border-top: 1px solid #dee2e6;
+        text-align: center;
+        font-size: 0.85em;
+        color: #6c757d;
+    }
+
+    .error-message {
+        background: #f8d7da;
+        border-left-color: #dc3545;
+        color: #721c24;
+    }
+
+    .auto-scroll-toggle {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        font-size: 0.9em;
+    }
+
+    .auto-scroll-toggle input[type="checkbox"] {
+        width: 16px;
+        height: 16px;
+        cursor: pointer;
+    }
+</style>
+
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📡 Streamr M3tering Stream Viewer</h1>
+            <div class="stream-id">Stream: 0x567853282663b601bfdb9203819b1fbb3fe18926/m3tering/test</div>
+        </div>
+    <div class="status-bar">
+        <div class="status">
+            <div class="status-indicator" id="statusIndicator"></div>
+            <span id="statusText">Connecting...</span>
+        </div>
+        <div class="stats">
+            <div>Messages: <span id="messageCount">0</span></div>
+            <div>Buffer: <span id="bufferCount">0</span></div>
+        </div>
+    </div>
+
+    <div class="controls">
+        <button class="btn btn-secondary" id="clearBtn">Clear Messages</button>
+        <div class="auto-scroll-toggle">
+            <input type="checkbox" id="autoScrollToggle" checked>
+            <label for="autoScrollToggle">Auto-scroll</label>
+        </div>
+    </div>
+
+    <div class="messages-container" id="messagesContainer">
+        <div class="empty-state">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"></path>
+            </svg>
+            <h3>Waiting for messages...</h3>
+            <p>Messages from the Streamr network will appear here in real-time.</p>
+        </div>
+    </div>
+
+    <div class="footer">
+        Connected to Streamr Network | Real-time M3tering Data Stream
+    </div>
+</div>
+
+<script>
+    let ws = null;
+    let messageCount = 0;
+    let autoScroll = true;
+    const messagesContainer = document.getElementById('messagesContainer');
+    const statusIndicator = document.getElementById('statusIndicator');
+    const statusText = document.getElementById('statusText');
+    const messageCountEl = document.getElementById('messageCount');
+    const bufferCountEl = document.getElementById('bufferCount');
+    const clearBtn = document.getElementById('clearBtn');
+    const autoScrollToggle = document.getElementById('autoScrollToggle');
+
+    function connect() {
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const wsUrl = `${protocol}//${window.location.host}`;
+        
+        ws = new WebSocket(wsUrl);
+
+        ws.onopen = () => {
+            console.log('WebSocket connected');
+            updateStatus('connected', 'Connected to Streamr Stream');
+        };
+
+        ws.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+            handleMessage(data);
+        };
+
+        ws.onerror = (error) => {
+            console.error('WebSocket error:', error);
+            updateStatus('error', 'Connection Error');
+        };
+
+        ws.onclose = () => {
+            console.log('WebSocket disconnected');
+            updateStatus('disconnected', 'Disconnected - Reconnecting...');
+            setTimeout(connect, 3000);
+        };
+    }
+
+    function handleMessage(data) {
+        switch (data.type) {
+            case 'connected':
+                console.log('Connected:', data.message);
+                break;
+            
+            case 'history':
+                console.log('Received history:', data.data.length, 'messages');
+                bufferCountEl.textContent = data.data.length;
+                data.data.forEach(msg => addMessage(msg.data, msg.timestamp, false));
+                break;
+            
+            case 'message':
+                addMessage(data.data, data.timestamp, true);
+                break;
+            
+            case 'error':
+                addError(data.message);
+                break;
+        }
+    }
+
+    function addMessage(data, timestamp, isNew) {
+        // Remove empty state if present
+        const emptyState = messagesContainer.querySelector('.empty-state');
+        if (emptyState) {
+            emptyState.remove();
+        }
+
+        if (isNew) {
+            messageCount++;
+            messageCountEl.textContent = messageCount;
+        }
+
+        const messageCard = document.createElement('div');
+        messageCard.className = 'message-card';
+        
+        const time = new Date(timestamp).toLocaleTimeString();
+        
+        // Handle array of messages
+        let content = '';
+        if (Array.isArray(data)) {
+            content = data.map((item, index) => `
+                <div style="margin-bottom: 10px; padding-bottom: 10px; ${index < data.length - 1 ? 'border-bottom: 1px solid #dee2e6;' : ''}">
+                    <div style="font-weight: bold; color: #667eea; margin-bottom: 5px;">M3ter ID: ${item.m3ter_id}</div>
+                    <div>${item.message}</div>
+                </div>
+            `).join('');
+        } else {
+            content = `<pre>${JSON.stringify(data, null, 2)}</pre>`;
+        }
+        
+        messageCard.innerHTML = `
+            <div class="message-header">
+                <span class="timestamp">${time}</span>
+                <span class="m3ter-id">${Array.isArray(data) ? data.length + ' items' : 'Data'}</span>
+            </div>
+            <div class="message-content">
+                ${content}
+            </div>
+        `;
+        
+        messagesContainer.insertBefore(messageCard, messagesContainer.firstChild);
+        
+        if (autoScroll) {
+            messagesContainer.scrollTop = 0;
+        }
+
+        // Limit to 100 messages in DOM
+        const messages = messagesContainer.querySelectorAll('.message-card');
+        if (messages.length > 100) {
+            messages[messages.length - 1].remove();
+        }
+    }
+
+    function addError(message) {
+        const messageCard = document.createElement('div');
+        messageCard.className = 'message-card error-message';
+        messageCard.innerHTML = `
+            <div class="message-header">
+                <span class="timestamp">${new Date().toLocaleTimeString()}</span>
+                <span style="color: #dc3545; font-weight: bold;">ERROR</span>
+            </div>
+            <div class="message-content">
+                ${message}
+            </div>
+        `;
+        messagesContainer.insertBefore(messageCard, messagesContainer.firstChild);
+    }
+
+    function updateStatus(status, text) {
+        statusText.textContent = text;
+        statusIndicator.className = 'status-indicator';
+        if (status === 'connected') {
+            statusIndicator.classList.add('connected');
+        }
+    }
+
+    clearBtn.addEventListener('click', () => {
+        const messages = messagesContainer.querySelectorAll('.message-card');
+        messages.forEach(msg => msg.remove());
+        
+        messagesContainer.innerHTML = `
+            <div class="empty-state">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"></path>
+                </svg>
+                <h3>Waiting for messages...</h3>
+                <p>Messages from the Streamr network will appear here in real-time.</p>
+            </div>
+        `;
+    });
+
+    autoScrollToggle.addEventListener('change', (e) => {
+        autoScroll = e.target.checked;
+    });
+
+    // Connect on page load
+    connect();
+</script>
+
+</body>
+</html>
