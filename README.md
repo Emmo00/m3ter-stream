@@ -1,4 +1,4 @@
-# Streamr M3tering Stream Viewer
+# M3tering Stream Viewer
 
 A real-time web application that subscribes to a Streamr network stream and displays messages via WebSocket to connected clients.
 
