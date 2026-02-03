@@ -34,14 +34,14 @@ async function initStreamrClient() {
 
     streamrClient = new StreamrClient({
       // No auth needed for subscribing to public streams
-      network: {
-        controlLayer: {
-          websocketPortRange: { min: 32200, max: 32250 },
-        },
-        node: {
-          acceptProxyConnections: false,
-        },
-      },
+      // network: {
+      //   controlLayer: {
+      //     websocketPortRange: { min: 32200, max: 32250 },
+      //   },
+      //   node: {
+      //     acceptProxyConnections: false,
+      //   },
+      // },
     });
   }
 
