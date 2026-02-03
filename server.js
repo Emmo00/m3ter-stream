@@ -31,15 +31,28 @@ const DISCONNECT_DELAY = 60 * 60 * 1000; // 1 hour in milliseconds
 async function initStreamrClient() {
   if (!streamrClient) {
     console.log("Initializing Streamr client...");
+
     streamrClient = new StreamrClient({
-      // Using anonymous subscription (no authentication needed for public streams)
+      // No auth needed for subscribing to public streams
+      network: {
+        controlLayer: {
+          websocketPortRange: { min: 32200, max: 32250 },
+        },
+        node: {
+          acceptProxyConnections: false,
+        },
+      },
     });
   }
+
   return streamrClient;
 }
 
 // Subscribe to Streamr stream
-async function subscribeToStream() {
+async function subscribeToStream(retryCount = 0) {
+  const MAX_RETRIES = 3;
+  const RETRY_DELAY = 5000;
+
   if (streamSubscription) {
     console.log("Already subscribed to stream");
     return;
@@ -71,9 +84,30 @@ async function subscribeToStream() {
       });
     });
 
+    streamSubscription.on("error", (error) => {
+      console.error("Stream subscription error:", error);
+    });
+
     console.log("Successfully subscribed to Streamr stream");
   } catch (error) {
-    console.error("Error subscribing to stream:", error);
+    console.error(`Error subscribing to stream (attempt ${retryCount + 1}/${MAX_RETRIES}):`, error.message);
+    
+    // Clean up failed client
+    if (streamrClient) {
+      try {
+        await streamrClient.destroy();
+      } catch (e) {
+        // Ignore cleanup errors
+      }
+      streamrClient = null;
+    }
+
+    if (retryCount < MAX_RETRIES - 1) {
+      console.log(`Retrying in ${RETRY_DELAY / 1000} seconds...`);
+      await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY));
+      return subscribeToStream(retryCount + 1);
+    }
+    
     throw error;
   }
 }
