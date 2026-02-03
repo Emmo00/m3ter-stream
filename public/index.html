@@ -155,18 +155,6 @@
         box-shadow: 5px 5px 0 #1a1a1a;
         padding: 16px;
         margin-bottom: 16px;
-        animation: slideIn 0.2s ease-out;
-      }
-
-      @keyframes slideIn {
-        from {
-          opacity: 0;
-          transform: translateY(-8px);
-        }
-        to {
-          opacity: 1;
-          transform: translateY(0);
-        }
       }
 
       .message-header {
@@ -295,11 +283,13 @@
         <div class="stats">
           <div>Messages: <span id="messageCount">0</span></div>
           <div>Buffer: <span id="bufferCount">0</span></div>
+          <div>Pending: <span id="pendingCount">0</span></div>
         </div>
       </div>
 
       <div class="controls">
         <button class="btn btn-secondary" id="clearBtn">Clear Messages</button>
+        <button class="btn btn-secondary" id="pauseBtn">Pause Stream</button>
         <div class="auto-scroll-toggle">
           <input type="checkbox" id="autoScrollToggle" checked />
           <label for="autoScrollToggle">Auto-scroll</label>
@@ -328,12 +318,20 @@
       let ws = null;
       let messageCount = 0;
       let autoScroll = true;
+      let isPaused = false;
+      let messageBuffer = [];
+      let lastRenderTime = 0;
+      let pendingRender = false;
+      const MAX_VISIBLE_MESSAGES = 50; // Reduced from 100
+      const RENDER_THROTTLE_MS = 100; // Throttle rendering
       const messagesContainer = document.getElementById("messagesContainer");
       const statusIndicator = document.getElementById("statusIndicator");
       const statusText = document.getElementById("statusText");
       const messageCountEl = document.getElementById("messageCount");
       const bufferCountEl = document.getElementById("bufferCount");
+      const pendingCountEl = document.getElementById("pendingCount");
       const clearBtn = document.getElementById("clearBtn");
+      const pauseBtn = document.getElementById("pauseBtn");
       const autoScrollToggle = document.getElementById("autoScrollToggle");
 
       function connect() {
@@ -373,11 +371,17 @@
           case "history":
             console.log("Received history:", data.data.length, "messages");
             bufferCountEl.textContent = data.data.length;
-            data.data.forEach((msg) => addMessage(msg.data, msg.timestamp, false));
+            // Process history messages in batches to avoid blocking UI
+            processMessageBatch(data.data.map(msg => ({...msg, isNew: false})));
             break;
 
           case "message":
-            addMessage(data.data, data.timestamp, true);
+            // Add to buffer instead of immediately rendering
+            if (!isPaused) {
+              messageBuffer.push({data: data.data, timestamp: data.timestamp, isNew: true});
+              pendingCountEl.textContent = messageBuffer.length;
+              scheduleRender();
+            }
             break;
 
           case "error":
@@ -386,38 +390,125 @@
         }
       }
 
-      function addMessage(data, timestamp, isNew) {
+      function scheduleRender() {
+        if (!pendingRender) {
+          pendingRender = true;
+          requestAnimationFrame(() => {
+            const now = Date.now();
+            if (now - lastRenderTime > RENDER_THROTTLE_MS) {
+              renderBufferedMessages();
+              lastRenderTime = now;
+              pendingRender = false;
+            } else {
+              setTimeout(() => {
+                renderBufferedMessages();
+                lastRenderTime = Date.now();
+                pendingRender = false;
+              }, RENDER_THROTTLE_MS - (now - lastRenderTime));
+            }
+          });
+        }
+      }
+
+      function renderBufferedMessages() {
+        if (messageBuffer.length === 0) return;
+        
         // Remove empty state if present
         const emptyState = messagesContainer.querySelector(".empty-state");
         if (emptyState) {
           emptyState.remove();
         }
 
-        if (isNew) {
-          messageCount++;
-          messageCountEl.textContent = messageCount;
+        // Create document fragment for efficient DOM manipulation
+        const fragment = document.createDocumentFragment();
+        
+        // Process messages from buffer
+        const messagesToProcess = messageBuffer.splice(0, Math.min(messageBuffer.length, 10)); // Process max 10 at once
+        
+        messagesToProcess.forEach(({data, timestamp, isNew}) => {
+          if (isNew) {
+            messageCount++;
+          }
+          
+          const messageCard = createMessageElement(data, timestamp);
+          fragment.appendChild(messageCard);
+        });
+
+        // Add all messages at once
+        if (fragment.children.length > 0) {
+          messagesContainer.insertBefore(fragment, messagesContainer.firstChild);
         }
 
+        // Update counts
+        messageCountEl.textContent = messageCount;
+        pendingCountEl.textContent = messageBuffer.length;
+
+        // Clean up excess messages efficiently
+        const messages = messagesContainer.querySelectorAll(".message-card");
+        if (messages.length > MAX_VISIBLE_MESSAGES) {
+          // Remove excess messages in batch
+          for (let i = MAX_VISIBLE_MESSAGES; i < messages.length; i++) {
+            messages[i].remove();
+          }
+        }
+
+        if (autoScroll) {
+          messagesContainer.scrollTop = 0;
+        }
+
+        // If there are more messages in buffer, schedule another render
+        if (messageBuffer.length > 0) {
+          scheduleRender();
+        }
+      }
+
+      function processMessageBatch(messages, startIndex = 0) {
+        const BATCH_SIZE = 5;
+        const endIndex = Math.min(startIndex + BATCH_SIZE, messages.length);
+        
+        for (let i = startIndex; i < endIndex; i++) {
+          const msg = messages[i];
+          messageBuffer.push({data: msg.data, timestamp: msg.timestamp, isNew: msg.isNew});
+        }
+        
+        scheduleRender();
+        
+        // Continue processing if there are more messages
+        if (endIndex < messages.length) {
+          setTimeout(() => processMessageBatch(messages, endIndex), 10);
+        }
+      }
+
+      function createMessageElement(data, timestamp) {
         const messageCard = document.createElement("div");
         messageCard.className = "message-card";
 
         const time = new Date(timestamp).toLocaleTimeString();
 
-        // Handle array of messages
+        // Handle array of messages with simplified rendering
         let content = "";
         if (Array.isArray(data)) {
-          content = data
-            .map(
-              (item, index) => `
-                <div style="margin-bottom: 12px; padding-bottom: 12px; ${index < data.length - 1 ? "border-bottom: 2px solid #1a1a1a;" : ""}">
-                    <div style="font-weight: 800; background: #ffd803; display: inline-block; padding: 2px 8px; border: 2px solid #1a1a1a; margin-bottom: 6px; text-transform: uppercase; font-size: 0.9em;">M3ter ID: ${item.m3ter_id}</div>
-                    <div style="padding: 4px 0;">${item.message}</div>
-                </div>
-            `,
-            )
-            .join("");
+          // Limit displayed items to reduce DOM complexity
+          const displayItems = data.slice(0, 5); // Show only first 5 items
+          const remainingCount = data.length - displayItems.length;
+          
+          content = displayItems
+            .map((item, index) => `
+              <div style="margin-bottom: 8px; padding-bottom: 8px; ${index < displayItems.length - 1 ? "border-bottom: 1px solid #ccc;" : ""}">
+                  <strong>M3ter ID:</strong> ${item.m3ter_id}<br>
+                  <span>${item.message}</span>
+              </div>
+          `).join("");
+          
+          if (remainingCount > 0) {
+            content += `<div style="font-style: italic; color: #666;">... and ${remainingCount} more items</div>`;
+          }
         } else {
-          content = `<pre>${JSON.stringify(data, null, 2)}</pre>`;
+          // Truncate long JSON to prevent excessive DOM size
+          const jsonString = JSON.stringify(data, null, 2);
+          content = jsonString.length > 500 ? 
+            `<pre>${jsonString.substring(0, 500)}...</pre>` : 
+            `<pre>${jsonString}</pre>`;
         }
 
         messageCard.innerHTML = `
@@ -430,17 +521,7 @@
             </div>
         `;
 
-        messagesContainer.insertBefore(messageCard, messagesContainer.firstChild);
-
-        if (autoScroll) {
-          messagesContainer.scrollTop = 0;
-        }
-
-        // Limit to 100 messages in DOM
-        const messages = messagesContainer.querySelectorAll(".message-card");
-        if (messages.length > 100) {
-          messages[messages.length - 1].remove();
-        }
+        return messageCard;
       }
 
       function addError(message) {
@@ -467,6 +548,11 @@
       }
 
       clearBtn.addEventListener("click", () => {
+        // Clear all state
+        messageBuffer = [];
+        messageCount = 0;
+        messageCountEl.textContent = 0;
+        
         const messages = messagesContainer.querySelectorAll(".message-card");
         messages.forEach((msg) => msg.remove());
 
@@ -483,6 +569,22 @@
 
       autoScrollToggle.addEventListener("change", (e) => {
         autoScroll = e.target.checked;
+      });
+
+      pauseBtn.addEventListener("click", () => {
+        isPaused = !isPaused;
+        pauseBtn.textContent = isPaused ? "Resume Stream" : "Pause Stream";
+        pauseBtn.className = isPaused ? "btn btn-primary" : "btn btn-secondary";
+        
+        if (isPaused) {
+          updateStatus("paused", "Stream Paused");
+        } else {
+          updateStatus("connected", "Connected to Streamr Stream");
+          // Resume processing if there are buffered messages
+          if (messageBuffer.length > 0) {
+            scheduleRender();
+          }
+        }
       });
 
       // Connect on page load
