@@ -372,7 +372,9 @@
             console.log("Received history:", data.data.length, "messages");
             bufferCountEl.textContent = data.data.length;
             // Process history messages in batches to avoid blocking UI
-            processMessageBatch(data.data.map(msg => ({...msg, isNew: false})));
+            // Reverse history so newest messages appear at the top
+            const historyMessages = data.data.map(msg => ({...msg, isNew: false})).reverse();
+            processMessageBatch(historyMessages);
             break;
 
           case "message":
@@ -422,10 +424,11 @@
         // Create document fragment for efficient DOM manipulation
         const fragment = document.createDocumentFragment();
         
-        // Process messages from buffer
+        // Process messages from buffer in reverse order so latest is on top
         const messagesToProcess = messageBuffer.splice(0, Math.min(messageBuffer.length, 10)); // Process max 10 at once
         
-        messagesToProcess.forEach(({data, timestamp, isNew}) => {
+        // Reverse to ensure newest message is added first (will appear at top)
+        messagesToProcess.reverse().forEach(({data, timestamp, isNew}) => {
           if (isNew) {
             messageCount++;
           }
@@ -434,7 +437,7 @@
           fragment.appendChild(messageCard);
         });
 
-        // Add all messages at once
+        // Add all messages at once at the beginning (newest first)
         if (fragment.children.length > 0) {
           messagesContainer.insertBefore(fragment, messagesContainer.firstChild);
         }
@@ -452,6 +455,7 @@
           }
         }
 
+        // Auto-scroll to top to show the newest message
         if (autoScroll) {
           messagesContainer.scrollTop = 0;
         }
