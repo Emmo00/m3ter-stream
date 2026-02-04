@@ -483,7 +483,14 @@
         const messageCard = document.createElement("div");
         messageCard.className = "message-card";
 
-        const time = new Date(timestamp).toLocaleTimeString();
+        // Format time to show date if not from today
+        const messageDate = new Date(timestamp);
+        const today = new Date();
+        const isToday = messageDate.toDateString() === today.toDateString();
+        
+        const time = isToday 
+          ? messageDate.toLocaleTimeString()
+          : messageDate.toLocaleDateString() + " " + messageDate.toLocaleTimeString();
 
         // Handle array of messages with simplified rendering
         let content = "";
@@ -527,9 +534,19 @@
       function addError(message) {
         const messageCard = document.createElement("div");
         messageCard.className = "message-card error-message";
+        
+        // Format time to show date if not from today
+        const messageDate = new Date();
+        const today = new Date();
+        const isToday = messageDate.toDateString() === today.toDateString();
+        
+        const time = isToday 
+          ? messageDate.toLocaleTimeString()
+          : messageDate.toLocaleDateString() + " " + messageDate.toLocaleTimeString();
+        
         messageCard.innerHTML = `
             <div class="message-header">
-                <span class="timestamp">${new Date().toLocaleTimeString()}</span>
+                <span class="timestamp">${time}</span>
                 <span style="color: #dc3545; font-weight: bold;">ERROR</span>
             </div>
             <div class="message-content">
