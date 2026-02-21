@@ -1,7 +1,6 @@
 const express = require("express");
 const WebSocket = require("ws");
 const { StreamrClient } = require("@streamr/sdk");
-const path = require("path");
 
 const app = express();
 const PORT = 4001;
@@ -32,17 +31,7 @@ async function initStreamrClient() {
   if (!streamrClient) {
     console.log("Initializing Streamr client...");
 
-    streamrClient = new StreamrClient({
-      // No auth needed for subscribing to public streams
-      // network: {
-      //   controlLayer: {
-      //     websocketPortRange: { min: 32200, max: 32250 },
-      //   },
-      //   node: {
-      //     acceptProxyConnections: false,
-      //   },
-      // },
-    });
+    streamrClient = new StreamrClient({});
   }
 
   return streamrClient;
@@ -91,7 +80,7 @@ async function subscribeToStream(retryCount = 0) {
     console.log("Successfully subscribed to Streamr stream");
   } catch (error) {
     console.error(`Error subscribing to stream (attempt ${retryCount + 1}/${MAX_RETRIES}):`, error.message);
-    
+
     // Clean up failed client
     if (streamrClient) {
       try {
@@ -107,7 +96,7 @@ async function subscribeToStream(retryCount = 0) {
       await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY));
       return subscribeToStream(retryCount + 1);
     }
-    
+
     throw error;
   }
 }
@@ -119,6 +108,19 @@ async function unsubscribeFromStream() {
     await streamSubscription.unsubscribe();
     streamSubscription = null;
     console.log("Unsubscribed from stream");
+  }
+}
+
+async function destroyStreamrClient() {
+  if (streamrClient) {
+    try {
+      await streamrClient.destroy();
+      console.log("Streamr client destroyed");
+    } catch (error) {
+      console.error("Error destroying Streamr client:", error);
+    } finally {
+      streamrClient = null;
+    }
   }
 }
 
@@ -136,6 +138,7 @@ function scheduleDisconnect() {
       if (connectedClients.size === 0) {
         console.log("1 hour passed with no connections. Disconnecting from stream...");
         await unsubscribeFromStream();
+        await destroyStreamrClient();
       }
     }, DISCONNECT_DELAY);
   }
